@@ -82,6 +82,10 @@ class ServerController extends Controller
             $response['server_key'] = Helper::getServerKey($this->nodeInfo->created_at, 32);
         }
 
+        if ($this->nodeInfo->protocol === 'mieru') {
+            $response = array_merge($response, ServerService::buildMieruConfig($this->nodeInfo));
+        }
+
         if ($this->nodeInfo->up_mbps == 0 && $this->nodeInfo->down_mbps == 0) {
             $response['ignore_client_bandwidth'] = true;
         } else {

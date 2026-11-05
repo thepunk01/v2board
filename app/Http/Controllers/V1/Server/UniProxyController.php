@@ -17,6 +17,7 @@ class UniProxyController extends Controller
     private $nodeInfo;
     private $nodeId;
     private $serverService;
+    private $isMieru = false;
 
     public function __construct(Request $request)
     {
@@ -34,6 +35,13 @@ class UniProxyController extends Controller
         $this->serverService = new ServerService();
         $this->nodeInfo = $this->serverService->getServer($this->nodeId, $this->nodeType);
         if (!$this->nodeInfo) abort(500, 'server is not exist');
+        if ($this->nodeType === 'mieru') {
+            // mieru 节点存放在 v2node 表（protocol=mieru），在线状态、流量统计、设备数都按 v2node 记录
+            $this->isMieru = true;
+            $this->nodeType = 'v2node';
+        } elseif ($this->nodeType === 'v2node' && $this->nodeInfo->protocol === 'mieru') {
+            $this->isMieru = true;
+        }
     }
 
     // 后端获取用户
@@ -43,9 +51,15 @@ class UniProxyController extends Controller
         Cache::put(CacheKey::get('SERVER_' . strtoupper($this->nodeType) . '_LAST_CHECK_AT', $this->nodeInfo->id), time(), 3600);
         $users = $this->serverService->getAvailableUsers($this->nodeInfo->group_id)
             ->map(function ($user) {
-                return array_filter($user->toArray(), function ($v) {
+                $item = array_filter($user->toArray(), function ($v) {
                     return !is_null($v);
                 });
+                if ($this->isMieru && isset($item['uuid'])) {
+                    // 与订阅一致：mieru 用户名、密码均为 uuid
+                    $item['username'] = $item['uuid'];
+                    $item['password'] = $item['uuid'];
+                }
+                return $item;
             })->toArray();
 
         $response['users'] = $users;
@@ -213,7 +227,10 @@ class UniProxyController extends Controller
     // 后端获取配置
     public function config(Request $request)
     {
-        switch ($this->nodeType) {
+        $response = [];
+        if ($this->isMieru) {
+            $response = ServerService::buildMieruConfig($this->nodeInfo);
+        } else switch ($this->nodeType) {
             case 'shadowsocks':
                 $response = [
                     'server_port' => $this->nodeInfo->server_port,

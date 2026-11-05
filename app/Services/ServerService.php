@@ -454,9 +454,39 @@ class ServerService
         return $routes;
     }
 
+    /**
+     * mieru 节点下发给后端的协议字段（v2node 节点 protocol=mieru）。
+     * 同时兼容 Xboard 格式（transport / traffic_pattern，供 soga type=xboard 使用）
+     * 与 port_bindings / user_hint_is_mandatory 格式。
+     * network_settings 可选键：traffic_pattern、user_hint_is_mandatory、multiplexing、mtu。
+     */
+    public static function buildMieruConfig($node): array
+    {
+        $ns = is_array($node['network_settings'] ?? null) ? $node['network_settings'] : [];
+        $transport = strtoupper($node['network'] ?? 'tcp') === 'UDP' ? 'UDP' : 'TCP';
+        $serverPort = (int)$node['server_port'];
+        $port = (string)($node['port'] ?? '');
+        if (preg_match('/^(\d+)-(\d+)$/', $port)) {
+            $binding = ['portRange' => $port, 'protocol' => $transport];
+        } else {
+            $binding = ['port' => $serverPort, 'protocol' => $transport];
+        }
+        return [
+            'protocol' => 'mieru',
+            'listen_ip' => $node['listen_ip'] ?? '0.0.0.0',
+            'server_port' => $serverPort,
+            'transport' => $transport,
+            'traffic_pattern' => (string)($ns['traffic_pattern'] ?? ''),
+            'user_hint_is_mandatory' => (bool)($ns['user_hint_is_mandatory'] ?? false),
+            'port_bindings' => [$binding],
+        ];
+    }
+
     public function getServer($serverId, $serverType)
     {
         switch ($serverType) {
+            case 'mieru':
+                return ServerV2node::where('id', $serverId)->where('protocol', 'mieru')->first();
             case 'v2node':
                 return ServerV2node::find($serverId);
             case 'vmess':

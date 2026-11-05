@@ -21,11 +21,11 @@ class V2nodeController extends Controller
             'listen_ip' => 'nullable',
             'port' => 'required',
             'server_port' => 'required',
-            'protocol' => 'required|in:shadowsocks,vmess,vless,trojan,tuic,hysteria2,anytls',
+            'protocol' => 'required|in:shadowsocks,vmess,vless,trojan,tuic,hysteria2,anytls,mieru',
             'tls' => 'required|in:0,1,2',
             'tls_settings' => 'nullable|array',
             'flow' => 'nullable|in:xtls-rprx-vision',
-            'network' => 'required|in:tcp,ws,grpc,http,httpupgrade,xhttp',
+            'network' => 'required|in:tcp,udp,ws,grpc,http,httpupgrade,xhttp',
             'network_settings' => 'nullable|array',
             'trusted_x_forwarded_for' => 'nullable|array',
             'encryption' => 'nullable',
@@ -50,6 +50,28 @@ class V2nodeController extends Controller
         }
         if (in_array($params['protocol'], ['hysteria2', 'trojan', 'tuic'])) {
             $params['tls'] = 1;
+        }
+        if ($params['network'] === 'udp' && $params['protocol'] !== 'mieru') {
+            abort(500, '仅 mieru 协议支持 UDP 传输');
+        }
+        if ($params['protocol'] === 'mieru') {
+            // mieru 不使用 TLS，传输层只有 TCP / UDP
+            $params['tls'] = 0;
+            $params['tls_settings'] = null;
+            $params['flow'] = null;
+            $params['encryption'] = null;
+            $params['encryption_settings'] = null;
+            if (!in_array($params['network'], ['tcp', 'udp'])) {
+                $params['network'] = 'tcp';
+            }
+            if (!preg_match('/^\d{1,5}(-\d{1,5})?$/', (string)$params['port'])) {
+                abort(500, 'mieru 连接端口需为单个端口或端口范围，如 2012 或 2012-2022');
+            }
+            $ns = is_array($params['network_settings'] ?? null) ? $params['network_settings'] : [];
+            if (isset($ns['user_hint_is_mandatory'])) {
+                $ns['user_hint_is_mandatory'] = filter_var($ns['user_hint_is_mandatory'], FILTER_VALIDATE_BOOLEAN);
+            }
+            $params['network_settings'] = $ns ?: null;
         }
         if (isset($params['tls']) && (int)$params['tls'] === 2) {
             $keyPair = SodiumCompat::crypto_box_keypair();
