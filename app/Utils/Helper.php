@@ -443,6 +443,31 @@ class Helper
         return "tuic://{$password}:{$password}@{$remote}:{$port}?{$query}#{$name}\r\n";
     }
 
+    /**
+     * mieru 简单分享链接（mierus://），供小火箭（Shadowrocket 2.2.81+）等客户端导入。
+     * 格式：mierus://用户名:密码@服务器?profile=..&mtu=..&multiplexing=..&port=..&protocol=..
+     * 有意不放进 buildUri() 的自动分发里，避免不支持 mieru 的客户端收到无法识别的链接。
+     */
+    public static function buildMieruShareUri($password, $server)
+    {
+        $ns = is_array($server['network_settings'] ?? null) ? $server['network_settings'] : [];
+        $protocol = strtoupper($server['network'] ?? 'tcp') === 'UDP' ? 'UDP' : 'TCP';
+        $params = [
+            'profile=' . rawurlencode($server['name']),
+            'mtu=' . (int)($ns['mtu'] ?? 1400),
+            'multiplexing=' . rawurlencode($ns['multiplexing'] ?? 'MULTIPLEXING_LOW'),
+            'port=' . rawurlencode((string)$server['port']),
+            'protocol=' . $protocol,
+        ];
+        if (!empty($ns['traffic_pattern'])) {
+            $params[] = 'traffic-pattern=' . rawurlencode($ns['traffic_pattern']);
+        }
+        $user = rawurlencode($password);
+        $host = self::formatHost($server['host']);
+        $name = self::encodeURIComponent($server['name']);
+        return "mierus://{$user}:{$user}@{$host}?" . implode('&', $params) . "#{$name}\r\n";
+    }
+
     public static function buildAnytlsUri($password, $server)
     {
         $tlsSettings = $server['tls_settings'] ?? [];
